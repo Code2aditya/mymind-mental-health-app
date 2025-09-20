@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +10,176 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  STUDENT
+  DOCTOR
+  ADMIN
+}
+
+enum MoodLevel {
+  VERY_LOW
+  LOW
+  NEUTRAL
+  GOOD
+  VERY_GOOD
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum ResourceType {
+  ARTICLE
+  VIDEO
+  AUDIO
+  EXERCISE
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  password  String
+  role      UserRole
+  avatar    String?
+  bio       String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Student specific
+  studentProfile StudentProfile?
+  
+  // Doctor specific
+  doctorProfile  DoctorProfile?
+  
+  // Relations
+  moodEntries      MoodEntry[]
+  studentAppointments Appointment[] @relation("StudentAppointments")
+  doctorAppointments  Appointment[] @relation("DoctorAppointments")
+  sentMessages     Message[]       @relation("SentMessages")
+  receivedMessages Message[]       @relation("ReceivedMessages")
+  progressRecords  ProgressRecord[]
+  resourceViews    ResourceView[]
+
+  @@map("users")
 }
 
-model Post {
+model StudentProfile {
+  id          String @id @default(cuid())
+  userId      String @unique
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  age         Int?
+  university  String?
+  course      String?
+  year        Int?
+  
+  @@map("student_profiles")
+}
+
+model DoctorProfile {
+  id              String @id @default(cuid())
+  userId          String @unique
+  user            User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization  String
+  experience      Int?
+  licenseNumber   String @unique
+  consultationFee Int?
+  available       Boolean @default(true)
+  
+  @@map("doctor_profiles")
+}
+
+model MoodEntry {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mood      MoodLevel
+  note      String?
+  tags      String?    // JSON string of mood tags
+  createdAt DateTime   @default(now())
+  
+  @@map("mood_entries")
+}
+
+model Appointment {
+  id          String             @id @default(cuid())
+  studentId   String
+  student     User               @relation("StudentAppointments", fields: [studentId], references: [id])
+  doctorId    String
+  doctor      User               @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  title       String
+  description String?
+  date        DateTime
+  duration    Int                // in minutes
+  status      AppointmentStatus  @default(PENDING)
+  meetingLink String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  
+  @@map("appointments")
+}
+
+model Message {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  senderId  String
+  sender    User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId String
+  receiver  User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  content   String
+  read      Boolean  @default(false)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  
+  @@map("messages")
+}
+
+model Resource {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  content     String?
+  type        ResourceType
+  url         String?
+  thumbnail   String?
+  duration    Int?          // for videos/audio in seconds
+  tags        String?       // JSON string
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  // Relations
+  views       ResourceView[]
+  
+  @@map("resources")
+}
+
+model ResourceView {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id])
+  progress   Float    @default(0) // 0 to 1
+  completed  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  
+  @@unique([userId, resourceId])
+  @@map("resource_views")
+}
+
+model ProgressRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String
+  description String?
+  value       Float    // progress value
+  target      Float    // target value
+  unit        String?  // e.g., "days", "points", "hours"
+  achieved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("progress_records")
 }
