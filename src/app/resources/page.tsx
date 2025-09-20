@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, BookOpen, Video, Headphones, FileText, Clock, Star, Eye, Heart, Filter } from "lucide-react";
+import { Search, BookOpen, Video, Headphones, FileText, Clock, Star, Eye, Heart, Filter, Check } from "lucide-react";
 
 interface Resource {
   id: string;
@@ -413,6 +413,8 @@ export default function ResourcesPage() {
             <TabsTrigger value="videos">Videos</TabsTrigger>
             <TabsTrigger value="audio">Audio</TabsTrigger>
             <TabsTrigger value="exercises">Exercises</TabsTrigger>
+            <TabsTrigger value="favorites">Favorites</TabsTrigger>
+            <TabsTrigger value="completed">Completed</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all">
@@ -606,6 +608,156 @@ export default function ResourcesPage() {
               </div>
             </TabsContent>
           ))}
+
+          <TabsContent value="favorites">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredResources.filter(r => r.isFavorite).map((resource) => (
+                <Card key={resource.id} className="hover:shadow-lg transition-shadow duration-300">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        {getTypeIcon(resource.type)}
+                        <CardTitle className="text-lg line-clamp-2">{resource.title}</CardTitle>
+                      </div>
+                      <Heart className="h-5 w-5 text-red-500 fill-current cursor-pointer" onClick={() => toggleFavorite(resource.id)} />
+                    </div>
+                    <CardDescription className="line-clamp-2">{resource.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span className="text-sm">{formatDuration(resource.duration || 0)}</span>
+                        </div>
+                        {resource.completed && (
+                          <Badge variant="secondary" className="bg-green-100 text-green-800">
+                            Completed
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Badge className={getTypeColor(resource.type)}>
+                          {resource.type}
+                        </Badge>
+                        <Badge className={getDifficultyColor(resource.difficulty)}>
+                          {resource.difficulty}
+                        </Badge>
+                        <Badge variant="outline">{resource.category}</Badge>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-1">
+                        {resource.tags.slice(0, 3).map((tag, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                        {resource.tags.length > 3 && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{resource.tags.length - 3}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button className="flex-1">
+                          {resource.type === "article" ? "Read" : 
+                           resource.type === "video" ? "Watch" :
+                           resource.type === "audio" ? "Listen" : "Start"}
+                        </Button>
+                        {!resource.completed && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => markAsCompleted(resource.id)}
+                          >
+                            Mark Complete
+                          </Button>
+                        )}
+                      </div>
+                      
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        By {resource.author}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="completed">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredResources.filter(r => r.isCompleted).map((resource) => (
+                <Card key={resource.id} className="hover:shadow-lg transition-shadow duration-300">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        {getTypeIcon(resource.type)}
+                        <CardTitle className="text-lg line-clamp-2">{resource.title}</CardTitle>
+                      </div>
+                      <Heart className={`h-5 w-5 cursor-pointer ${resource.isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} onClick={() => toggleFavorite(resource.id)} />
+                    </div>
+                    <CardDescription className="line-clamp-2">{resource.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span className="text-sm">{formatDuration(resource.duration || 0)}</span>
+                        </div>
+                        <Badge variant="secondary" className="bg-green-100 text-green-800">
+                          Completed
+                        </Badge>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Badge className={getTypeColor(resource.type)}>
+                          {resource.type}
+                        </Badge>
+                        <Badge className={getDifficultyColor(resource.difficulty)}>
+                          {resource.difficulty}
+                        </Badge>
+                        <Badge variant="outline">{resource.category}</Badge>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-1">
+                        {resource.tags.slice(0, 3).map((tag, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                        {resource.tags.length > 3 && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{resource.tags.length - 3}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1">
+                          Review Again
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => markAsCompleted(resource.id)}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        By {resource.author}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
     </div>

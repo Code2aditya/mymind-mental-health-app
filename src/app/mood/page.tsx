@@ -9,7 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Heart, Brain, TrendingUp, Calendar, Plus, Frown, Meh, Smile, Laugh, Star } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Area, AreaChart } from "recharts";
+import { Heart, Brain, TrendingUp, Calendar, Plus, Frown, Meh, Smile, Laugh, Star, Sparkles, Target, Clock, Award, Zap } from "lucide-react";
 
 const moodEmojis = {
   VERY_LOW: "😢",
@@ -35,6 +38,25 @@ const moodLabels = {
   VERY_GOOD: "Very Good"
 };
 
+const moodValues = {
+  VERY_LOW: 1,
+  LOW: 2,
+  NEUTRAL: 3,
+  GOOD: 4,
+  VERY_GOOD: 5
+};
+
+const chartConfig = {
+  mood: {
+    label: "Mood Score",
+    color: "hsl(var(--chart-1))",
+  },
+  average: {
+    label: "Average Mood",
+    color: "hsl(var(--chart-2))",
+  },
+} as const;
+
 interface MoodEntry {
   id: string;
   mood: keyof typeof moodEmojis;
@@ -43,44 +65,65 @@ interface MoodEntry {
   date: string;
 }
 
+interface ChartData {
+  date: string;
+  mood: number;
+  label: string;
+}
+
+interface InsightData {
+  type: string;
+  title: string;
+  description: string;
+  action: string;
+  icon: any;
+  color: string;
+}
+
 export default function MoodTracking() {
   const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
   const [selectedMood, setSelectedMood] = useState<keyof typeof moodEmojis | "">("");
   const [note, setNote] = useState("");
   const [tags, setTags] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
+  const [timeRange, setTimeRange] = useState<"7d" | "30d" | "90d">("7d");
+  const [isAnimating, setIsAnimating] = useState(false);
 
-  // Mock data for demonstration
+  // Enhanced mock data for demonstration
   useEffect(() => {
-    const mockData: MoodEntry[] = [
-      {
-        id: "1",
-        mood: "GOOD",
-        note: "Had a productive day at college. Feeling positive about upcoming exams.",
-        tags: ["productive", "college", "positive"],
-        date: new Date().toISOString()
-      },
-      {
-        id: "2",
-        mood: "NEUTRAL",
-        note: "Regular day, nothing special happened.",
-        tags: ["regular"],
-        date: new Date(Date.now() - 86400000).toISOString()
-      },
-      {
-        id: "3",
-        mood: "VERY_GOOD",
-        note: "Great session with friends! Feeling energized and happy.",
-        tags: ["friends", "social", "happy"],
-        date: new Date(Date.now() - 172800000).toISOString()
+    const generateMockData = (): MoodEntry[] => {
+      const data: MoodEntry[] = [];
+      const moods: (keyof typeof moodEmojis)[] = ["VERY_LOW", "LOW", "NEUTRAL", "GOOD", "VERY_GOOD"];
+      
+      for (let i = 0; i < 30; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        
+        // Add some variation to make it more realistic
+        const moodIndex = Math.floor(Math.random() * moods.length);
+        const mood = moods[moodIndex];
+        
+        data.push({
+          id: `entry-${i}`,
+          mood,
+          note: `Day ${i + 1} mood entry - ${moodLabels[mood].toLowerCase()}`,
+          tags: ["daily", "tracking", mood.toLowerCase()],
+          date: date.toISOString()
+        });
       }
-    ];
+      
+      return data.reverse();
+    };
+
+    const mockData = generateMockData();
     setMoodEntries(mockData);
   }, []);
 
   const handleAddMoodEntry = () => {
     if (!selectedMood) return;
 
+    setIsAnimating(true);
+    
     const newEntry: MoodEntry = {
       id: Date.now().toString(),
       mood: selectedMood,
@@ -94,6 +137,8 @@ export default function MoodTracking() {
     setNote("");
     setTags("");
     setShowAddForm(false);
+
+    setTimeout(() => setIsAnimating(false), 1000);
   };
 
   const getMoodStats = () => {
@@ -104,7 +149,7 @@ export default function MoodTracking() {
 
     const totalEntries = moodEntries.length;
     const averageMood = Object.entries(moodCounts).reduce((acc, [mood, count]) => {
-      const moodValue = Object.keys(moodEmojis).indexOf(mood) + 1;
+      const moodValue = moodValues[mood as keyof typeof moodValues];
       return acc + (moodValue * count);
     }, 0) / totalEntries;
 
@@ -133,7 +178,6 @@ export default function MoodTracking() {
       if (daysDiff === streak) {
         streak++;
       } else if (daysDiff === streak + 1) {
-        // Allow for one day gap if it's the first entry
         if (streak === 0) streak = 1;
         else break;
       } else {
@@ -145,6 +189,134 @@ export default function MoodTracking() {
   };
 
   const streak = getStreak();
+
+  // Generate chart data
+  const getChartData = (): ChartData[] => {
+    const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    const filteredEntries = moodEntries.filter(entry => 
+      new Date(entry.date) >= cutoffDate
+    );
+
+    return filteredEntries.map(entry => ({
+      date: new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      mood: moodValues[entry.mood],
+      label: moodEmojis[entry.mood]
+    })).reverse();
+  };
+
+  // Generate mood distribution data for pie chart
+  const getMoodDistributionData = () => {
+    return Object.entries(moodCounts).map(([mood, count]) => ({
+      name: moodLabels[mood as keyof typeof moodLabels],
+      value: count,
+      emoji: moodEmojis[mood as keyof typeof moodEmojis],
+      color: moodColors[mood as keyof typeof moodColors].replace('text', 'bg')
+    }));
+  };
+
+  // Generate weekly trends data
+  const getWeeklyTrendsData = () => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const today = new Date();
+    const currentDay = today.getDay();
+    
+    return days.map((day, index) => {
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() - (currentDay - index + 7) % 7);
+      
+      const dayEntries = moodEntries.filter(entry => {
+        const entryDate = new Date(entry.date);
+        return entryDate.getDay() === index && 
+               entryDate.toDateString() === targetDate.toDateString();
+      });
+
+      const avgMood = dayEntries.length > 0 
+        ? dayEntries.reduce((sum, entry) => sum + moodValues[entry.mood], 0) / dayEntries.length
+        : 0;
+
+      return {
+        day,
+        mood: avgMood,
+        entries: dayEntries.length
+      };
+    });
+  };
+
+  // Generate insights
+  const getInsights = (): InsightData[] => {
+    const insights: InsightData[] = [];
+    
+    // Streak insight
+    if (streak >= 7) {
+      insights.push({
+        type: "achievement",
+        title: "Amazing Streak!",
+        description: `You've tracked your mood for ${streak} consecutive days. Consistency is key to mental wellness!`,
+        action: "Keep it up!",
+        icon: Award,
+        color: "from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20"
+      });
+    }
+
+    // Average mood insight
+    if (averageMood >= 4) {
+      insights.push({
+        type: "positive",
+        title: "Great Wellbeing",
+        description: "Your average mood is excellent. You're maintaining a positive outlook!",
+        action: "Share your positivity",
+        icon: Sparkles,
+        color: "from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20"
+      });
+    } else if (averageMood <= 2) {
+      insights.push({
+        type: "concern",
+        title: "Need Support",
+        description: "Your mood has been lower lately. Consider reaching out for support.",
+        action: "Get help",
+        icon: Heart,
+        color: "from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20"
+      });
+    }
+
+    // Pattern insight
+    const recentEntries = moodEntries.slice(0, 7);
+    const hasImprovement = recentEntries.length >= 2 && 
+      moodValues[recentEntries[0].mood] > moodValues[recentEntries[recentEntries.length - 1].mood];
+    
+    if (hasImprovement) {
+      insights.push({
+        type: "trend",
+        title: "Positive Trend",
+        description: "Your mood has been improving over the past week. Great progress!",
+        action: "View trends",
+        icon: TrendingUp,
+        color: "from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20"
+      });
+    }
+
+    // Default insight
+    if (insights.length === 0) {
+      insights.push({
+        type: "general",
+        title: "Keep Tracking",
+        description: "Regular mood tracking helps you understand your patterns better.",
+        action: "Learn more",
+        icon: Brain,
+        color: "from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20"
+      });
+    }
+
+    return insights;
+  };
+
+  const chartData = getChartData();
+  const moodDistributionData = getMoodDistributionData();
+  const weeklyTrendsData = getWeeklyTrendsData();
+  const insights = getInsights();
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -161,48 +333,55 @@ export default function MoodTracking() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card>
+          <Card className={`transition-all duration-300 hover:shadow-lg ${isAnimating ? 'animate-pulse' : ''}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Current Streak</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{streak} days</div>
-              <p className="text-xs text-muted-foreground">
-                Keep tracking daily! 🔥
+              <div className="text-2xl font-bold text-orange-600 flex items-center gap-2">
+                {streak} days
+                {streak >= 7 && <Zap className="h-5 w-5 text-yellow-500" />}
+              </div>
+              <Progress value={Math.min(streak * 10, 100)} className="mt-2" />
+              <p className="text-xs text-muted-foreground mt-1">
+                {streak === 0 ? "Start your streak today!" : streak >= 7 ? "Amazing consistency! 🔥" : "Keep tracking daily! 🔥"}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="transition-all duration-300 hover:shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Entries</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">{totalEntries}</div>
-              <p className="text-xs text-muted-foreground">
-                Mood entries logged
+              <Progress value={Math.min(totalEntries * 2, 100)} className="mt-2" />
+              <p className="text-xs text-muted-foreground mt-1">
+                {totalEntries === 0 ? "No entries yet" : totalEntries < 10 ? "Getting started!" : totalEntries < 30 ? "Building momentum!" : "Great tracking habit!"}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="transition-all duration-300 hover:shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Average Mood</CardTitle>
               <Brain className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-2xl font-bold text-green-600 flex items-center gap-2">
                 {averageMood ? averageMood.toFixed(1) : "0"}/5
+                {averageMood >= 4 && <Sparkles className="h-5 w-5 text-green-500" />}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Overall wellbeing score
+              <Progress value={(averageMood / 5) * 100} className="mt-2" />
+              <p className="text-xs text-muted-foreground mt-1">
+                {averageMood >= 4 ? "Excellent wellbeing!" : averageMood >= 3 ? "Good balance!" : averageMood >= 2 ? "Room for improvement" : "Consider support"}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="transition-all duration-300 hover:shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Today's Mood</CardTitle>
               <Heart className="h-4 w-4 text-muted-foreground" />
@@ -210,10 +389,13 @@ export default function MoodTracking() {
             <CardContent>
               <div className="text-2xl font-bold text-purple-600">
                 {moodEntries.length > 0 && new Date(moodEntries[0].date).toDateString() === new Date().toDateString() 
-                  ? moodEmojis[moodEntries[0].mood] 
+                  ? <span className="flex items-center gap-2">
+                      {moodEmojis[moodEntries[0].mood]}
+                      <span className="text-sm">{moodLabels[moodEntries[0].mood]}</span>
+                    </span>
                   : "Not logged"}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-2">
                 How are you feeling today?
               </p>
             </CardContent>
@@ -226,6 +408,8 @@ export default function MoodTracking() {
             <TabsTrigger value="entries">Recent Entries</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="insights">Insights</TabsTrigger>
+            <TabsTrigger value="goals">Goals</TabsTrigger>
+            <TabsTrigger value="journal">Journal</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -367,79 +551,180 @@ export default function MoodTracking() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="analytics">
+          <TabsContent value="analytics" className="space-y-6">
+            {/* Time Range Selector */}
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Mood Analytics</h3>
+              <Select value={timeRange} onValueChange={(value: "7d" | "30d" | "90d") => setTimeRange(value)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7d">Last 7 days</SelectItem>
+                  <SelectItem value="30d">Last 30 days</SelectItem>
+                  <SelectItem value="90d">Last 90 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+              {/* Mood Trend Line Chart */}
+              <Card className="transition-all duration-300 hover:shadow-lg">
                 <CardHeader>
-                  <CardTitle>Weekly Trends</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Mood Trend
+                  </CardTitle>
                   <CardDescription>
-                    Your mood patterns over the last 7 days
+                    Your mood patterns over time
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-8">
-                    <TrendingUp className="h-16 w-16 mx-auto mb-4 text-blue-500" />
-                    <h3 className="text-lg font-semibold mb-2">Mood Trends</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Visual analytics coming soon
-                    </p>
-                    <div className="space-y-2">
-                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-                        <div key={day} className="flex items-center justify-between">
-                          <span className="text-sm">{day}</span>
-                          <div className="flex gap-1">
-                            {Array.from({ length: 5 }, (_, i) => (
-                              <div
-                                key={i}
-                                className={`w-2 h-8 rounded ${
-                                  i < 3 ? "bg-green-500" : "bg-gray-200 dark:bg-gray-700"
-                                }`}
-                              ></div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <ChartContainer config={chartConfig} className="h-80">
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="date" 
+                        tick={{ fontSize: 12 }}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        domain={[0, 5]}
+                        tick={{ fontSize: 12 }}
+                        tickLine={false}
+                      />
+                      <ChartTooltip 
+                        content={<ChartTooltipContent />}
+                        cursor={{ stroke: 'hsl(var(--muted))', strokeWidth: 1 }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="mood" 
+                        stroke="hsl(var(--chart-1))" 
+                        strokeWidth={2}
+                        dot={{ fill: 'hsl(var(--chart-1))', strokeWidth: 2, r: 4 }}
+                        activeDot={{ r: 6, stroke: 'hsl(var(--chart-1))', strokeWidth: 2 }}
+                      />
+                    </LineChart>
+                  </ChartContainer>
                 </CardContent>
               </Card>
 
-              <Card>
+              {/* Mood Distribution Pie Chart */}
+              <Card className="transition-all duration-300 hover:shadow-lg">
                 <CardHeader>
-                  <CardTitle>Mood Insights</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5" />
+                    Mood Distribution
+                  </CardTitle>
                   <CardDescription>
-                    AI-powered analysis of your mood patterns
+                    How your moods are distributed
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">
-                        Positive Trend Detected
-                      </h4>
-                      <p className="text-sm text-blue-600 dark:text-blue-300">
-                        Your mood has been improving over the past week. Keep up the great work!
-                      </p>
-                    </div>
-                    
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <h4 className="font-semibold text-green-800 dark:text-green-200 mb-2">
-                        Best Day: Friday
-                      </h4>
-                      <p className="text-sm text-green-600 dark:text-green-300">
-                        You tend to feel best on Fridays. Consider scheduling important activities on this day.
-                      </p>
-                    </div>
-                    
-                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                      <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
-                        Common Triggers
-                      </h4>
-                      <p className="text-sm text-yellow-600 dark:text-yellow-300">
-                        Based on your entries, "work" and "stress" appear frequently. Consider stress management techniques.
-                      </p>
-                    </div>
-                  </div>
+                  <ChartContainer config={chartConfig} className="h-80">
+                    <PieChart>
+                      <Pie
+                        data={moodDistributionData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {moodDistributionData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip 
+                        content={<ChartTooltipContent />}
+                      />
+                      <ChartLegend 
+                        content={<ChartLegendContent />}
+                        verticalAlign="bottom"
+                      />
+                    </PieChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+
+              {/* Weekly Trends Bar Chart */}
+              <Card className="transition-all duration-300 hover:shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Weekly Patterns
+                  </CardTitle>
+                  <CardDescription>
+                    Your average mood by day of the week
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={chartConfig} className="h-80">
+                    <BarChart data={weeklyTrendsData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="day" 
+                        tick={{ fontSize: 12 }}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        domain={[0, 5]}
+                        tick={{ fontSize: 12 }}
+                        tickLine={false}
+                      />
+                      <ChartTooltip 
+                        content={<ChartTooltipContent />}
+                      />
+                      <Bar 
+                        dataKey="mood" 
+                        fill="hsl(var(--chart-2))" 
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+
+              {/* Mood Area Chart */}
+              <Card className="transition-all duration-300 hover:shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    Mood Intensity
+                  </CardTitle>
+                  <CardDescription>
+                    Visual representation of mood intensity over time
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={chartConfig} className="h-80">
+                    <AreaChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="date" 
+                        tick={{ fontSize: 12 }}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        domain={[0, 5]}
+                        tick={{ fontSize: 12 }}
+                        tickLine={false}
+                      />
+                      <ChartTooltip 
+                        content={<ChartTooltipContent />}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="mood" 
+                        stroke="hsl(var(--chart-1))" 
+                        fill="hsl(var(--chart-1))" 
+                        fillOpacity={0.3}
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ChartContainer>
                 </CardContent>
               </Card>
             </div>
@@ -448,60 +733,236 @@ export default function MoodTracking() {
           <TabsContent value="insights">
             <Card>
               <CardHeader>
-                <CardTitle>Personalized Insights</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  AI-Powered Insights
+                </CardTitle>
                 <CardDescription>
-                  AI-powered recommendations based on your mood patterns
+                  Personalized recommendations based on your mood patterns
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg">
-                    <Brain className="h-8 w-8 text-purple-600 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Mindfulness Recommendation</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                      Based on your recent mood patterns, we recommend trying a 10-minute breathing exercise.
-                    </p>
-                    <Button variant="outline" size="sm">
-                      Try Exercise
-                    </Button>
-                  </div>
-                  
-                  <div className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-lg">
-                    <Heart className="h-8 w-8 text-blue-600 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Social Connection</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                      Your mood improves on social days. Consider reaching out to a friend today.
-                    </p>
-                    <Button variant="outline" size="sm">
-                      Find Activities
-                    </Button>
-                  </div>
-                  
-                  <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg">
-                    <TrendingUp className="h-8 w-8 text-green-600 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Progress Tracking</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                      You're doing great! Your consistency has improved by 40% this month.
-                    </p>
-                    <Button variant="outline" size="sm">
-                      View Progress
-                    </Button>
-                  </div>
-                  
-                  <div className="p-6 bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 rounded-lg">
-                    <Calendar className="h-8 w-8 text-orange-600 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Schedule Optimization</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                      Your energy peaks in the morning. Schedule important tasks before noon.
-                    </p>
-                    <Button variant="outline" size="sm">
-                      Optimize Schedule
-                    </Button>
-                  </div>
+                  {insights.map((insight, index) => (
+                    <div 
+                      key={index}
+                      className={`p-6 bg-gradient-to-br ${insight.color} rounded-lg transition-all duration-300 hover:shadow-lg hover:scale-105`}
+                    >
+                      <insight.icon className="h-8 w-8 mb-4 text-current" />
+                      <h3 className="text-lg font-semibold mb-2">{insight.title}</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        {insight.description}
+                      </p>
+                      <Button variant="outline" size="sm" className="w-full">
+                        {insight.action}
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
+
+        <TabsContent value="goals">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5" />
+                Mood Goals & Targets
+              </CardTitle>
+              <CardDescription>
+                Set and track your mental health goals
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Current Goals</h3>
+                  <div className="space-y-3">
+                    <div className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">Daily Mood Tracking</span>
+                        <Badge variant="outline">Active</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        Track your mood every day for 30 days
+                      </p>
+                      <Progress value={73} className="h-2" />
+                      <p className="text-xs text-gray-500 mt-1">22/30 days completed</p>
+                    </div>
+                    
+                    <div className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">Improve Average Mood</span>
+                        <Badge variant="outline">Active</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        Reach an average mood score of 4.0
+                      </p>
+                      <Progress value={80} className="h-2" />
+                      <p className="text-xs text-gray-500 mt-1">Current: 3.2/5.0</p>
+                    </div>
+                    
+                    <div className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">Stress Reduction</span>
+                        <Badge variant="secondary">Paused</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        Reduce stress-related mood entries by 50%
+                      </p>
+                      <Progress value={30} className="h-2" />
+                      <p className="text-xs text-gray-500 mt-1">30% reduction achieved</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Create New Goal</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="goal-type">Goal Type</Label>
+                      <Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select goal type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="consistency">Daily Tracking</SelectItem>
+                          <SelectItem value="improvement">Mood Improvement</SelectItem>
+                          <SelectItem value="reduction">Stress Reduction</SelectItem>
+                          <SelectItem value="streak">Maintain Streak</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="goal-target">Target</Label>
+                      <Input id="goal-target" placeholder="e.g., 30 days, 4.0 average" />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="goal-deadline">Deadline</Label>
+                      <Input id="goal-deadline" type="date" />
+                    </div>
+                    
+                    <Button className="w-full">Create Goal</Button>
+                  </div>
+                  
+                  <div className="mt-6">
+                    <h4 className="font-medium mb-2">Achievements</h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="text-center p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                        <div className="text-2xl">🏆</div>
+                        <div className="text-xs">First Week</div>
+                      </div>
+                      <div className="text-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <div className="text-2xl">🌟</div>
+                        <div className="text-xs">Mood Master</div>
+                      </div>
+                      <div className="text-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                        <div className="text-2xl">💪</div>
+                        <div className="text-xs">Consistency</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="journal">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5" />
+                Mood Journal
+              </CardTitle>
+              <CardDescription>
+                Reflect on your thoughts and feelings with guided journaling
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Today's Reflection</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="journal-prompt">Daily Prompt</Label>
+                      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg mb-2">
+                        <p className="text-sm">What are three things you're grateful for today?</p>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="journal-entry">Your Thoughts</Label>
+                      <Textarea 
+                        id="journal-entry"
+                        placeholder="Write your reflections here..."
+                        className="min-h-32"
+                      />
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button className="flex-1">Save Entry</Button>
+                      <Button variant="outline">Get AI Insights</Button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Recent Entries</h3>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    <div className="p-3 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Today</span>
+                        <Badge variant="outline">Gratitude</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                        I'm grateful for my supportive friends, the beautiful weather today, and having a safe place to live...
+                      </p>
+                    </div>
+                    
+                    <div className="p-3 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Yesterday</span>
+                        <Badge variant="outline">Challenge</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                        Today was challenging with work stress, but I managed to use my breathing exercises and felt better...
+                      </p>
+                    </div>
+                    
+                    <div className="p-3 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">2 days ago</span>
+                        <Badge variant="outline">Achievement</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                        Completed my presentation successfully! Felt nervous but proud of myself afterward...
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <h4 className="font-medium mb-2">Journal Prompts</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      <Button variant="outline" size="sm" className="justify-start">
+                        What made you smile today?
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start">
+                        Describe a challenge you overcame
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start">
+                        What are you looking forward to?
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
         </Tabs>
       </div>
     </div>
